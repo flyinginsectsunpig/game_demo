@@ -16,16 +16,11 @@ export class GameStateManager {
   private lastStatsSaveTime: number = 0;
   private readonly STATS_SAVE_INTERVAL: number = 30000;
   private lastPauseState: boolean = false;
-  private inputManager: InputManager | null = null;
 
   constructor() {
     this.comboSystem = new ComboSystem();
     this.screenShake = new ScreenShakeSystem();
     this.gameStartTime = Date.now();
-  }
-
-  public setInputManager(inputManager: InputManager) {
-    this.inputManager = inputManager;
   }
 
   public reset() {
@@ -130,10 +125,6 @@ export class GameStateManager {
         this.lastPauseState = input.pause;
         return true;
       } else if (gameState.phase === "paused") {
-        // Clear all input before resuming to prevent input state conflicts
-        if (this.inputManager) {
-          this.inputManager.clearAllInput();
-        }
         gameState.resume();
         this.lastPauseState = input.pause;
         return true;

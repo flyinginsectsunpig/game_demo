@@ -15,6 +15,9 @@ export interface InputState {
 
 export class InputManager {
   private keys: { [key: string]: boolean } = {};
+  private ignoreUntilRelease: Set<string> = new Set();
+  private isPaused: boolean = false;
+  private listenersAttached: boolean = false;
 
   constructor() {
     this.keys = {
@@ -34,25 +37,47 @@ export class InputManager {
   }
 
   public addEventListeners() {
+    if (this.listenersAttached) {
+      return;
+    }
     document.addEventListener("keydown", this.handleKeyDown);
     document.addEventListener("keyup", this.handleKeyUp);
+    this.listenersAttached = true;
   }
 
   public removeEventListeners() {
+    if (!this.listenersAttached) {
+      return;
+    }
     document.removeEventListener("keydown", this.handleKeyDown);
     document.removeEventListener("keyup", this.handleKeyUp);
+    this.listenersAttached = false;
   }
 
   private handleKeyDown = (e: KeyboardEvent) => {
-    this.keys[e.code] = true;
-    // Prevent default behavior for game keys (except Escape which should bubble to modals)
-    if (["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) {
+    const isMovementKey = ["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code);
+    
+    // Don't register movement keys if game is paused
+    if (isMovementKey && this.isPaused) {
+      e.preventDefault();
+      return;
+    }
+    
+    // Don't register key if we're ignoring it until release
+    if (!this.ignoreUntilRelease.has(e.code)) {
+      this.keys[e.code] = true;
+    }
+    
+    // Prevent default behavior for game keys
+    if (isMovementKey) {
       e.preventDefault();
     }
   };
 
   private handleKeyUp = (e: KeyboardEvent) => {
     this.keys[e.code] = false;
+    // Remove from ignore list when key is released
+    this.ignoreUntilRelease.delete(e.code);
   };
 
   public getInput(paused: boolean = false) {
@@ -75,18 +100,18 @@ export class InputManager {
     }
 
     return {
-      up: this.keys["KeyW"] || this.keys["ArrowUp"],
-      down: this.keys["KeyS"] || this.keys["ArrowDown"],
-      left: this.keys["KeyA"] || this.keys["ArrowLeft"],
-      right: this.keys["KeyD"] || this.keys["ArrowRight"],
-      weapon1: this.keys["1"],
-      weapon2: this.keys["2"],
-      weapon3: this.keys["3"],
-      weapon4: this.keys["4"],
-      weapon5: this.keys["5"],
-      mute: this.keys["m"] || this.keys["M"],
-      restart: this.keys["r"] || this.keys["R"],
-      pause: this.keys["Escape"]
+      up: !!(this.keys["KeyW"] || this.keys["ArrowUp"]),
+      down: !!(this.keys["KeyS"] || this.keys["ArrowDown"]),
+      left: !!(this.keys["KeyA"] || this.keys["ArrowLeft"]),
+      right: !!(this.keys["KeyD"] || this.keys["ArrowRight"]),
+      weapon1: !!this.keys["1"],
+      weapon2: !!this.keys["2"],
+      weapon3: !!this.keys["3"],
+      weapon4: !!this.keys["4"],
+      weapon5: !!this.keys["5"],
+      mute: !!(this.keys["m"] || this.keys["M"]),
+      restart: !!(this.keys["r"] || this.keys["R"]),
+      pause: !!this.keys["Escape"]
     };
   }
 
@@ -96,42 +121,21 @@ export class InputManager {
 
   // Note: update() method removed as it was causing conflicts with event-driven key handling
 
-  public clearMovementKeys() {
-    // Clear movement keys to prevent stuck movement after pause/unpause
-    this.keys["KeyW"] = false;
-    this.keys["ArrowUp"] = false;
-    this.keys["KeyS"] = false;
-    this.keys["ArrowDown"] = false;
-    this.keys["KeyA"] = false;
-    this.keys["ArrowLeft"] = false;
-    this.keys["KeyD"] = false;
-    this.keys["ArrowRight"] = false;
+  public setPaused(paused: boolean) {
+    this.isPaused = paused;
   }
 
-  public clearAllInput() {
-    // Clear all input state including movement, weapons, pause, and control keys
-    // Movement keys
-    this.keys["KeyW"] = false;
-    this.keys["ArrowUp"] = false;
-    this.keys["KeyS"] = false;
-    this.keys["ArrowDown"] = false;
-    this.keys["KeyA"] = false;
-    this.keys["ArrowLeft"] = false;
-    this.keys["KeyD"] = false;
-    this.keys["ArrowRight"] = false;
-
-    // Weapon selection keys
-    this.keys["1"] = false;
-    this.keys["2"] = false;
-    this.keys["3"] = false;
-    this.keys["4"] = false;
-    this.keys["5"] = false;
-
-    // Control keys
-    this.keys["Escape"] = false;
-    this.keys["m"] = false;
-    this.keys["M"] = false;
-    this.keys["r"] = false;
-    this.keys["R"] = false;
+  public clearMovementKeys() {
+    // Only mark currently pressed movement keys to be ignored until released
+    // This prevents stuck movement from keys held during pause
+    const movementKeys = ["KeyW", "ArrowUp", "KeyS", "ArrowDown", "KeyA", "ArrowLeft", "KeyD", "ArrowRight"];
+    movementKeys.forEach(key => {
+      // Only add to ignore list if the key is currently pressed
+      if (this.keys[key]) {
+        this.ignoreUntilRelease.add(key);
+      }
+      // Clear the key state
+      this.keys[key] = false;
+    });
   }
 }

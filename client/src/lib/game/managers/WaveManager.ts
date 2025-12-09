@@ -130,6 +130,45 @@ export class WaveManager {
     return new BossEnemy(x, y, bossType, this.currentWave);
   }
 
+  // Debug method to spawn a specific boss type
+  public spawnSpecificBoss(canvasWidth: number, canvasHeight: number, bossType: BossType, playerPos?: { x: number; y: number }): BossEnemy {
+    let x: number, y: number;
+    const margin = 200;
+    
+    if (playerPos) {
+      const angle = Math.random() * Math.PI * 2;
+      const distance = 400 + Math.random() * 200;
+      x = playerPos.x + Math.cos(angle) * distance;
+      y = playerPos.y + Math.sin(angle) * distance;
+    } else {
+      const edge = Math.floor(Math.random() * 4);
+      switch (edge) {
+        case 0:
+          x = Math.random() * canvasWidth;
+          y = -margin;
+          break;
+        case 1:
+          x = canvasWidth + margin;
+          y = Math.random() * canvasHeight;
+          break;
+        case 2:
+          x = Math.random() * canvasWidth;
+          y = canvasHeight + margin;
+          break;
+        case 3:
+          x = -margin;
+          y = Math.random() * canvasHeight;
+          break;
+        default:
+          x = canvasWidth / 2;
+          y = -margin;
+      }
+    }
+    
+    console.log(`Debug boss spawned: ${bossType}`);
+    return new BossEnemy(x, y, bossType, this.currentWave);
+  }
+
   public isBossWave(): boolean {
     return this.currentWave % this.bossSpawnInterval === 0;
   }

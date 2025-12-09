@@ -19,7 +19,7 @@ import { StatisticsSystem } from "../lib/game/systems/StatisticsSystem";
 type ModalSource = "mainMenu" | "pauseMenu" | "gameplay" | null;
 
 export default function Game() {
-  const { phase, restart, resumeFromLevelUp, selectCharacter, resume } = useGameState();
+  const { phase, restart, resumeFromLevelUp, selectCharacter, resume, pause } = useGameState();
   const { setBackgroundMusic, setHitSound, setSuccessSound, toggleMute } = useAudio();
   const audioInitialized = useRef(false);
   const [engine, setEngine] = useState<GameEngine | null>(null);
@@ -29,6 +29,7 @@ export default function Game() {
   const [showUpgradeShop, setShowUpgradeShop] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
   const [modalSource, setModalSource] = useState<ModalSource>(null);
+  const wasPlayingBeforeDebugRef = useRef(false);
 
   // Recover any orphaned session from a previous crash/refresh
   useEffect(() => {
@@ -37,6 +38,22 @@ export default function Game() {
       console.log('[Game] Recovered orphaned session from previous run');
     }
   }, []);
+
+  // Handle pause/resume when debug screen opens/closes
+  useEffect(() => {
+    if (showDebug) {
+      // Opening debug screen - pause if we were playing
+      if (wasPlayingBeforeDebugRef.current) {
+        pause();
+      }
+    } else {
+      // Closing debug screen - resume if we were playing before
+      if (wasPlayingBeforeDebugRef.current) {
+        wasPlayingBeforeDebugRef.current = false;
+        resume();
+      }
+    }
+  }, [showDebug, pause, resume]);
 
   useEffect(() => {
     const initAudio = async () => {
@@ -54,19 +71,24 @@ export default function Game() {
     const handleDebugKey = (e: KeyboardEvent) => {
       if (e.key === "`" || e.key === "~") {
         e.preventDefault();
+        
         const gameState = useGameState.getState();
-        setShowDebug(prev => {
-          if (!prev) {
-            if (gameState.phase === "ready") {
-              setModalSource("mainMenu");
-            } else if (gameState.phase === "paused") {
-              setModalSource("pauseMenu");
-            } else if (gameState.phase === "playing") {
-              setModalSource("gameplay");
-            }
+        
+        if (!showDebug) {
+          // Opening debug screen
+          if (gameState.phase === "ready") {
+            setModalSource("mainMenu");
+          } else if (gameState.phase === "paused") {
+            setModalSource("pauseMenu");
+          } else if (gameState.phase === "playing") {
+            setModalSource("gameplay");
+            wasPlayingBeforeDebugRef.current = true;
           }
-          return !prev;
-        });
+          setShowDebug(true);
+        } else {
+          // Closing debug screen
+          setShowDebug(false);
+        }
       }
     };
 
@@ -115,46 +137,11 @@ export default function Game() {
     if (modalType === "settings") setShowSettings(true);
   };
 
-  if (showStatistics) {
-    return (
-      <StatisticsScreen onClose={handleCloseModal} />
-    );
-  }
-
-  if (showUpgradeShop) {
-    return (
-      <UpgradeShop onClose={handleCloseModal} />
-    );
-  }
-
-  if (showDebug) {
-    return (
-      <DebugTestingScreen onClose={handleCloseModal} />
-    );
-  }
-
-  if (showSettings) {
-    return (
-      <SettingsMenu onClose={handleCloseModal} />
-    );
-  }
-
+  // Handle screens that should completely replace the game view
   if (phase === "gameOver" || phase === "ended") {
     return (
       <div className="relative w-full h-full">
         <GameOverScreen />
-      </div>
-    );
-  }
-
-  if (phase === "levelUp") {
-    return (
-      <div className="relative w-full h-full">
-        <GameCanvas onEngineReady={setEngine} />
-        <PowerUpSelection
-          onSelect={handlePowerUpSelect}
-          onClose={resumeFromLevelUp}
-        />
       </div>
     );
   }
@@ -167,6 +154,7 @@ export default function Game() {
     );
   }
 
+  // Main game view with overlays
   return (
     <div className="relative w-full h-full flex flex-col bg-gray-900 text-white overflow-hidden">
       <GameCanvas onEngineReady={setEngine} />
@@ -178,12 +166,35 @@ export default function Game() {
       />
       <LevelUpEffect />
 
+      {phase === "levelUp" && (
+        <PowerUpSelection
+          onSelect={handlePowerUpSelect}
+          onClose={resumeFromLevelUp}
+        />
+      )}
+
       {phase === "paused" && (
         <PauseMenu
           onShowSettings={() => openFromPauseMenu("settings")}
           onShowStatistics={() => openFromPauseMenu("statistics")}
           onShowUpgradeShop={() => openFromPauseMenu("shop")}
         />
+      )}
+
+      {showDebug && (
+        <DebugTestingScreen onClose={handleCloseModal} engine={engine} />
+      )}
+
+      {showSettings && (
+        <SettingsMenu onClose={handleCloseModal} />
+      )}
+
+      {showStatistics && (
+        <StatisticsScreen onClose={handleCloseModal} />
+      )}
+
+      {showUpgradeShop && (
+        <UpgradeShop onClose={handleCloseModal} />
       )}
     </div>
   );

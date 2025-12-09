@@ -20,7 +20,7 @@ import { CameraSystem } from './rendering/CameraSystem';
 import { InfiniteTileRenderer } from './rendering/InfiniteTileRenderer';
 import { Particle } from './rendering/Particle';
 import { InputManager } from './systems/InputManager';
-import { useGameState } from "../stores/useGameState";
+import { useGameState, GamePhase } from "../stores/useGameState";
 import { useAudio } from "../stores/useAudio";
 import { useGameStore } from "../stores/useGame";
 import { WeaponEvolutionSystem } from './systems/WeaponEvolution';
@@ -63,6 +63,7 @@ export class GameEngine {
   private lastStatsSaveTime: number = 0;
   private readonly STATS_SAVE_INTERVAL: number = 30000;
   private isPaused: boolean = false;
+  private previousPhase: GamePhase = "ready";
 
   constructor(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) {
     this.gameStartTime = Date.now();
@@ -109,24 +110,6 @@ export class GameEngine {
     this.inputManager.addEventListeners();
     // GameStateManager now handles its own input setup for pause, restart, etc.
     this.gameStateManager.setupInputHandlers(this.inputManager, () => this.resetGame());
-    this.gameStateManager.setInputManager(this.inputManager);
-    this.setupPhaseTransitionHandler();
-  }
-
-  private setupPhaseTransitionHandler() {
-    const gameState = useGameState.getState();
-    let previousPhase = gameState.phase;
-
-    useGameState.subscribe(
-      (state) => state.phase,
-      (currentPhase) => {
-        // Clear all input when transitioning TO playing phase from any other phase
-        if (currentPhase === "playing" && previousPhase !== "playing") {
-          this.inputManager.clearAllInput();
-        }
-        previousPhase = currentPhase;
-      }
-    );
   }
 
   private resetGame() {
@@ -145,11 +128,14 @@ export class GameEngine {
 
   public start() {
     this.gameLoop.start();
+    // Ensure event listeners are attached (safe to call multiple times)
+    this.inputManager.addEventListeners();
   }
 
   public stop() {
     this.gameLoop.stop();
-    this.inputManager.removeEventListeners();
+    // Don't remove event listeners - we want to keep listening even when paused
+    // this.inputManager.removeEventListeners();
   }
 
   private update = (deltaTime: number) => {
@@ -157,14 +143,27 @@ export class GameEngine {
     const input = this.inputManager.getInput();
     const pauseStateChanged = this.gameStateManager.handlePauseInput(input, this.inputManager);
 
-    // Update local pause state based on pause state change
-    if (pauseStateChanged) {
-      const gameState = useGameState.getState();
-      this.isPaused = (gameState.phase === "paused");
-    }
-
     // Get game state for checks
     const gameState = useGameState.getState();
+    
+    // Track previous pause state for detecting transitions
+    const wasPaused = this.isPaused;
+    
+    // Update local pause state to match game state
+    const isPausedOrLevelUp = (gameState.phase === "paused" || gameState.phase === "levelUp");
+    this.isPaused = (gameState.phase === "paused");
+    
+    // Update InputManager pause state to prevent movement key registration during pause/levelUp
+    this.inputManager.setPaused(isPausedOrLevelUp);
+    
+    // Clear movement keys when transitioning from paused or levelUp to playing
+    // This handles resume from pause menu button and level up screen
+    if ((this.previousPhase === "paused" || this.previousPhase === "levelUp") && gameState.phase === "playing") {
+      this.inputManager.clearMovementKeys();
+    }
+    
+    // Update previous phase for next frame
+    this.previousPhase = gameState.phase;
 
     // Check if game is currently paused using local state
     if (this.isPaused) {
@@ -193,6 +192,8 @@ export class GameEngine {
     if (gameState.phase === "levelUp") {
       // Update entity manager to keep enemies alive, and continue wave manager updates
       const player = this.entityManager.getPlayer();
+      const emptyInput = { left: false, right: false, up: false, down: false, weapon1: false, weapon2: false, weapon3: false, weapon4: false, weapon5: false, mute: false, restart: false, pause: false };
+      player.update(deltaTime, emptyInput, this.canvas.width, this.canvas.height, this.infiniteTileRenderer);
       this.entityManager.update(deltaTime, { x: player.x, y: player.y });
       this.waveManager.update(deltaTime);
       return;
@@ -213,7 +214,8 @@ export class GameEngine {
     const player = this.entityManager.getPlayer();
 
     // Update player
-    player.update(deltaTime, this.inputManager.getInput(this.isPaused), this.canvas.width, this.canvas.height, this.infiniteTileRenderer);
+    const playerInput = this.inputManager.getInput(this.isPaused);
+    player.update(deltaTime, playerInput, this.canvas.width, this.canvas.height, this.infiniteTileRenderer);
 
     // Update camera
     this.camera.update(player.x + player.width / 2, player.y + player.height / 2, deltaTime);
@@ -338,5 +340,28 @@ export class GameEngine {
       y: enemy.y,
       isBoss: enemy instanceof BossEnemy // Check against BossEnemy class directly
     }));
+  }
+
+  // Debug method to spawn a specific boss
+  public spawnDebugBoss(bossType: "necromancer" | "vampire_lord" | "ancient_golem") {
+    const player = this.entityManager.getPlayer();
+    const boss = this.waveManager.spawnSpecificBoss(
+      this.canvas.width,
+      this.canvas.height,
+      bossType,
+      { x: player.x, y: player.y }
+    );
+    this.entityManager.addEnemies([boss]);
+    this.isBossActive = true;
+    this.currentBoss = boss;
+    
+    // Trigger boss warning
+    const gameState = useGameState.getState();
+    const bossNames = {
+      necromancer: "The Necromancer",
+      vampire_lord: "Vampire Lord",
+      ancient_golem: "Ancient Golem"
+    };
+    gameState.triggerBossWarning(bossNames[bossType], `A powerful ${bossNames[bossType]} has appeared!`);
   }
 }

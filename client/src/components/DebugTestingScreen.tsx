@@ -3,12 +3,14 @@ import { useState, useEffect } from "react";
 import { useGameState } from "../lib/stores/useGameState";
 import { PersistentProgressionSystem } from "../lib/game/systems/PersistentProgressionSystem";
 import { StatisticsSystem } from "../lib/game/systems/StatisticsSystem";
+import { GameEngine } from "../lib/game/GameEngine";
 
 interface DebugTestingScreenProps {
   onClose: () => void;
+  engine: GameEngine | null;
 }
 
-export default function DebugTestingScreen({ onClose }: DebugTestingScreenProps) {
+export default function DebugTestingScreen({ onClose, engine }: DebugTestingScreenProps) {
   const gameState = useGameState.getState();
   const [persistentData, setPersistentData] = useState(PersistentProgressionSystem.load());
   const [statistics, setStatistics] = useState(StatisticsSystem.load());
@@ -98,9 +100,12 @@ export default function DebugTestingScreen({ onClose }: DebugTestingScreenProps)
     }
   };
 
-  const triggerBossWarning = () => {
-    gameState.triggerBossWarning("Test Boss", "This is a test boss warning");
-    setTimeout(() => gameState.hideBossWarning(), 3000);
+  const spawnBoss = (bossType: "necromancer" | "vampire_lord" | "ancient_golem") => {
+    if (!engine) {
+      alert("Game engine not ready!");
+      return;
+    }
+    engine.spawnDebugBoss(bossType);
   };
 
   const maxOutUpgrade = (upgrade: keyof typeof persistentData.permanentUpgrades) => {
@@ -203,10 +208,16 @@ export default function DebugTestingScreen({ onClose }: DebugTestingScreenProps)
             <button onClick={simulateBossKill} className="gothic-button text-xs py-2" style={{ background: '#3d1f4d', borderColor: '#5d2d7d' }}>
               Simulate Boss Kill
             </button>
-            <button onClick={triggerBossWarning} className="gothic-button text-xs py-2" style={{ background: '#1f1f4d', borderColor: '#2d2d7d' }}>
-              Test Boss Warning
+            <button onClick={() => spawnBoss("necromancer")} className="gothic-button text-xs py-2" style={{ background: '#1f1f4d', borderColor: '#2d2d7d' }}>
+              Summon Necromancer
             </button>
-            <button onClick={() => gameState.showLevelUp()} className="gothic-button text-xs py-2" style={{ background: '#1f1f4d', borderColor: '#2d2d7d' }}>
+            <button onClick={() => spawnBoss("vampire_lord")} className="gothic-button text-xs py-2" style={{ background: '#4d1f1f', borderColor: '#7d2d2d' }}>
+              Summon Vampire Lord
+            </button>
+            <button onClick={() => spawnBoss("ancient_golem")} className="gothic-button text-xs py-2" style={{ background: '#1f4d1f', borderColor: '#2d7d2d' }}>
+              Summon Ancient Golem
+            </button>
+            <button onClick={() => gameState.showLevelUp()} className="gothic-button text-xs py-2" style={{ background: '#4d3d1f', borderColor: '#7d6d2d' }}>
               Trigger Level Up
             </button>
           </div>

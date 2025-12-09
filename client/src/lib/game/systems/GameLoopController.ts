@@ -11,7 +11,9 @@ export class GameLoopController {
   }
 
   public start() {
-    this.gameLoop(0);
+    // Reset lastTime to avoid huge deltaTime spike when resuming
+    this.lastTime = 0;
+    this.animationFrameId = requestAnimationFrame(this.gameLoop);
   }
 
   public stop() {
